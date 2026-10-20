@@ -172,16 +172,29 @@ textarea, input[type=text] { width: 100%; font: inherit; padding: 10px; border-r
       try { const m = JSON.parse(e.data); if (m.event === "message" || m.message) apply(JSON.parse(m.message)); } catch (err) {}
     };
     es.onerror = () => setStatus();
-    send({ cmd: "state" });
+    refresh();
+  }
+
+  // State is sent only on request: ntfy.sh allows 250 messages a day per IP.
+  let askedAt = 0;
+  function refresh() {
+    if (!conf || Date.now() - askedAt < 5000) return;
+    askedAt = Date.now(); setStatus(); send({ cmd: "state" });
+    setTimeout(setStatus, 12000);
   }
 
   function setStatus() {
     const el = $("#status");
+    const answered = lastTs * 1000 >= askedAt - 2000;
+    if (askedAt && !answered) {
+      const waited = Date.now() - askedAt;
+      el.textContent = waited < 12000 ? "спрашиваю ПК…" : "ПК не отвечает";
+      el.className = "pill " + (waited < 12000 ? "" : "bad"); return;
+    }
     if (!lastTs) { el.textContent = "нет данных от ПК"; el.className = "pill bad"; return; }
     const age = Math.round(Date.now() / 1000 - lastTs);
-    const fresh = age < 40 * 60;
-    el.textContent = fresh ? (age < 90 ? "ПК на связи" : `ПК: ${Math.round(age / 60)} мин назад`) : "ПК молчит";
-    el.className = "pill " + (fresh ? "ok" : "bad");
+    el.textContent = age < 90 ? "ПК на связи" : `данные ${Math.round(age / 60)} мин назад ↻`;
+    el.className = "pill " + (age < 90 ? "ok" : "");
   }
 
   function sw(checked, onChange) {
@@ -302,6 +315,9 @@ textarea, input[type=text] { width: 100%; font: inherit; padding: 10px; border-r
   };
   $("#forget").onclick = (e) => { e.preventDefault(); store("pult", null); conf = null; if (es) es.close(); init(); };
   setInterval(setStatus, 15000);
+  $("#status").onclick = refresh;
+  $("#status").style.cursor = "pointer";
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(); });
   init();
 })();
 </script>
